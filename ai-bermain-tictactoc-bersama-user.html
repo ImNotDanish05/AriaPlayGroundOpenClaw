@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI bermain tictactoc bersama user</title>
+  <style>
+    :root {
+      --bg: #0f1226;
+      --card: #171a35;
+      --text: #e9ecff;
+      --muted: #aeb6e6;
+      --x: #35d0ff;
+      --o: #ff7ab6;
+      --win: #7bffb2;
+      --line: rgba(255,255,255,.16);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(900px 500px at 10% -10%, #2a2f66 0%, transparent 45%),
+        radial-gradient(700px 400px at 120% 0%, #124d6c 0%, transparent 45%),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      padding: 18px;
+    }
+    .card {
+      width: min(680px, 100%);
+      background: rgba(23,26,53,.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      overflow: hidden;
+    }
+    .top {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .title { font-weight: 800; }
+    .meta { color: var(--muted); font-size: 14px; }
+
+    .content {
+      display: grid;
+      grid-template-columns: 1fr 240px;
+      gap: 16px;
+      padding: 16px;
+    }
+    @media (max-width: 700px) {
+      .content { grid-template-columns: 1fr; }
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: min(460px, 100%);
+      margin: 0 auto;
+    }
+    .cell {
+      aspect-ratio: 1/1;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #0f1430;
+      display: grid;
+      place-items: center;
+      font-size: clamp(36px, 8vw, 60px);
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      transition: transform .08s ease, background .15s ease;
+    }
+    .cell:hover { transform: translateY(-1px); background: #151b3f; }
+    .cell.disabled { cursor: not-allowed; opacity: .8; }
+    .x { color: var(--x); text-shadow: 0 0 14px rgba(53,208,255,.35); }
+    .o { color: var(--o); text-shadow: 0 0 14px rgba(255,122,182,.35); }
+    .win { outline: 2px solid var(--win); background: rgba(123,255,178,.08); }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.03);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .status { color: #fff; font-weight: 700; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #071220;
+      background: linear-gradient(90deg, #7bffb2, #35d0ff);
+    }
+    .ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <section class="top">
+      <div class="title">🤖 AI bermain tictactoc bersama user</div>
+      <div class="meta">AI pakai Minimax + Alpha-Beta + heuristik taktis</div>
+    </section>
+
+    <section class="content">
+      <div class="board" id="board"></div>
+
+      <aside class="side">
+        <div class="panel">
+          Kamu: <b class="x">X</b><br>
+          AI Aria: <b class="o">O</b>
+        </div>
+        <div class="panel">
+          Status:<br>
+          <span id="status" class="status">Giliran kamu (X)</span>
+        </div>
+        <div class="panel">
+          Skor:<br>
+          Kamu <b id="uScore">0</b> • AI <b id="aScore">0</b> • Seri <b id="dScore">0</b>
+        </div>
+        <div class="panel">
+          Level AI: <b>Nightmare</b> (hampir mustahil dikalahkan 😈)
+        </div>
+        <div class="btns">
+          <button id="newRound">New Round</button>
+          <button id="resetScore" class="ghost">Reset Score</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const uScoreEl = document.getElementById('uScore');
+    const aScoreEl = document.getElementById('aScore');
+    const dScoreEl = document.getElementById('dScore');
+
+    const HUMAN = 'X';
+    const AI = 'O';
+    const EMPTY = '';
+
+    const WIN_LINES = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+
+    let board = Array(9).fill(EMPTY);
+    let gameOver = false;
+    let userScore = 0, aiScore = 0, drawScore = 0;
+
+    // Positional weights for heuristic ordering (helps style + speed)
+    const POS_WEIGHT = [3,2,3,2,4,2,3,2,3];
+
+    function render() {
+      boardEl.innerHTML = '';
+      board.forEach((v, i) => {
+        const c = document.createElement('button');
+        c.className = 'cell' + (v ? ' disabled' : '');
+        c.dataset.i = i;
+        c.textContent = v;
+        if (v === HUMAN) c.classList.add('x');
+        if (v === AI) c.classList.add('o');
+        if (gameOver) c.classList.add('disabled');
+        c.addEventListener('click', onHumanMove);
+        boardEl.appendChild(c);
+      });
+    }
+
+    function setStatus(txt){ statusEl.textContent = txt; }
+    function updateScore(){
+      uScoreEl.textContent = userScore;
+      aScoreEl.textContent = aiScore;
+      dScoreEl.textContent = drawScore;
+    }
+
+    function winnerOf(b){
+      for (const line of WIN_LINES){
+        const [a,bx,c] = line;
+        if (b[a] && b[a] === b[bx] && b[a] === b[c]) return { winner:b[a], line };
+      }
+      if (b.every(x => x !== EMPTY)) return { winner:'DRAW', line:null };
+      return null;
+    }
+
+    function highlightWin(line){
+      if (!line) return;
+      const cells = [...boardEl.children];
+      line.forEach(i => cells[i]?.classList.add('win'));
+    }
+
+    // Tactical detector: immediate winning/blocking moves
+    function tacticalMove(b, who){
+      for(let i=0;i<9;i++){
+        if (b[i] !== EMPTY) continue;
+        b[i] = who;
+        const w = winnerOf(b);
+        b[i] = EMPTY;
+        if (w && w.winner === who) return i;
+      }
+      return -1;
+    }
+
+    // Minimax + alpha-beta pruning with depth-aware scoring
+    function minimax(b, depth, isMax, alpha, beta){
+      const end = winnerOf(b);
+      if (end){
+        if (end.winner === AI) return 100 - depth;
+        if (end.winner === HUMAN) return depth - 100;
+        return 0;
+      }
+
+      if (isMax){
+        let best = -Infinity;
+        const moves = [];
+        for(let i=0;i<9;i++) if(b[i]===EMPTY) moves.push(i);
+        // ordering: center/corner first for stronger pruning + behavior
+        moves.sort((i,j)=>POS_WEIGHT[j]-POS_WEIGHT[i]);
+
+        for(const i of moves){
+          b[i] = AI;
+          const score = minimax(b, depth+1, false, alpha, beta);
+          b[i] = EMPTY;
+          best = Math.max(best, score);
+          alpha = Math.max(alpha, best);
+          if (beta <= alpha) break;
+        }
+        return best;
+      } else {
+        let best = Infinity;
+        const moves = [];
+        for(let i=0;i<9;i++) if(b[i]===EMPTY) moves.push(i);
+        moves.sort((i,j)=>POS_WEIGHT[j]-POS_WEIGHT[i]);
+
+        for(const i of moves){
+          b[i] = HUMAN;
+          const score = minimax(b, depth+1, true, alpha, beta);
+          b[i] = EMPTY;
+          best = Math.min(best, score);
+          beta = Math.min(beta, best);
+          if (beta <= alpha) break;
+        }
+        return best;
+      }
+    }
+
+    function aiBestMove(){
+      // 1) Win now
+      const winNow = tacticalMove(board, AI);
+      if (winNow !== -1) return winNow;
+
+      // 2) Block immediate human win
+      const blockNow = tacticalMove(board, HUMAN);
+      if (blockNow !== -1) return blockNow;
+
+      // 3) Try build fork / prevent fork bias via minimax + tie-break heuristic
+      let bestScore = -Infinity;
+      let bestMoves = [];
+
+      for(let i=0;i<9;i++){
+        if (board[i] !== EMPTY) continue;
+        board[i] = AI;
+        const score = minimax(board, 0, false, -Infinity, Infinity);
+        board[i] = EMPTY;
+
+        if (score > bestScore){
+          bestScore = score;
+          bestMoves = [i];
+        } else if (score === bestScore){
+          bestMoves.push(i);
+        }
+      }
+
+      // tie-breaker: prefer center -> corner -> side
+      bestMoves.sort((a,b)=>POS_WEIGHT[b]-POS_WEIGHT[a]);
+      return bestMoves[0];
+    }
+
+    function endRound(result){
+      gameOver = true;
+      if (result.winner === HUMAN){
+        userScore++;
+        setStatus('Kamu menang?! Gila… 😳');
+      } else if (result.winner === AI){
+        aiScore++;
+        setStatus('AI Aria menang. Try harder, Senpai 😼');
+      } else {
+        drawScore++;
+        setStatus('Seri. Nice defense ✨');
+      }
+      updateScore();
+      if (result.line) highlightWin(result.line);
+      render();
+    }
+
+    function onHumanMove(e){
+      if (gameOver) return;
+      const i = Number(e.currentTarget.dataset.i);
+      if (board[i] !== EMPTY) return;
+
+      board[i] = HUMAN;
+      render();
+
+      let r = winnerOf(board);
+      if (r) return endRound(r);
+
+      setStatus('AI sedang berpikir...');
+
+      // tiny delay biar kerasa AI mikir
+      setTimeout(() => {
+        const aiMove = aiBestMove();
+        if (aiMove !== undefined && aiMove !== null && board[aiMove] === EMPTY) {
+          board[aiMove] = AI;
+        }
+
+        render();
+        r = winnerOf(board);
+        if (r) return endRound(r);
+
+        setStatus('Giliran kamu (X)');
+      }, 220);
+    }
+
+    function newRound(){
+      board = Array(9).fill(EMPTY);
+      gameOver = false;
+      setStatus('Giliran kamu (X)');
+      render();
+    }
+
+    document.getElementById('newRound').addEventListener('click', newRound);
+    document.getElementById('resetScore').addEventListener('click', () => {
+      userScore = aiScore = drawScore = 0;
+      updateScore();
+      newRound();
+    });
+
+    updateScore();
+    render();
+  </script>
+</body>
+</html>
