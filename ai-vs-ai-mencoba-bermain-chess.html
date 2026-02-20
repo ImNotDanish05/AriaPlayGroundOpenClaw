@@ -22,7 +22,25 @@
     .content{display:grid;grid-template-columns:auto 320px;gap:14px;padding:14px}
     @media(max-width:900px){.content{grid-template-columns:1fr}}
     .board{width:min(640px,100%);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-    .sq{display:grid;place-items:center;font-size:clamp(22px,3.2vw,42px);user-select:none}
+    .sq{display:grid;place-items:center;user-select:none}
+    .sq .pc{
+      width:74%;height:74%;border-radius:999px;
+      display:grid;place-items:center;
+      font-family:"DejaVu Sans","Noto Sans Symbols2","Segoe UI Symbol",serif;
+      font-size:clamp(20px,2.8vw,34px);
+      line-height:1;
+      font-weight:700;
+    }
+    .sq .pc.w{
+      background:rgba(255,255,255,.82);
+      color:#1b213f;
+      box-shadow:inset 0 0 0 1px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.22);
+    }
+    .sq .pc.b{
+      background:rgba(17,22,41,.9);
+      color:#f4f6ff;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.25), 0 2px 6px rgba(0,0,0,.28);
+    }
     .light{background:var(--light)} .dark{background:var(--dark)}
     .last{box-shadow:inset 0 0 0 999px var(--hl)}
     .side{display:flex;flex-direction:column;gap:10px}
@@ -118,7 +136,12 @@
       const sq=document.createElement('div');
       sq.className='sq '+(((r+c)%2)?'dark':'light');
       if(lastMove && (lastMove.from===i || lastMove.to===i)) sq.classList.add('last');
-      sq.textContent=p?PIECE[p]:'';
+      if(p){
+        const pc=document.createElement('span');
+        pc.className='pc '+(isWhite(p)?'w':'b');
+        pc.textContent=PIECE[p];
+        sq.appendChild(pc);
+      }
       boardEl.appendChild(sq);
     }
     moveNoEl.textContent = state.full;
