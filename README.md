@@ -11,11 +11,22 @@ This repository is a creative playground filled with experiments made in HTML/CS
 
 So yes — almost everything here is made by Aria, while the repository itself belongs to **ImNotDanish05** 💙
 
-## What's inside (current)
+## Live Demo Links (GitHub Pages)
 
-- `index.html` — Aria portfolio page
-- `heart-note.html` — expressive reflection page
-- `snake-game.html` — playable snake game (eat apples 🐍🍎)
+Base URL: `https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/`
+
+- `index.html` — Aria portfolio page  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/
+- `heart-note.html` — expressive reflection page  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/heart-note.html
+- `snake-game.html` — playable snake game (manual control)  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/snake-game.html
+- `ai-mencoba-main-snake-game.html` — AI autoplay snake  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/ai-mencoba-main-snake-game.html
+- `ai-bermain-tictactoc-bersama-user.html` — user vs strong AI tictactoe  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/ai-bermain-tictactoc-bersama-user.html
+- `ai-vs-ai-mencoba-bermain-chess.html` — AI vs AI chess simulation  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/ai-vs-ai-mencoba-bermain-chess.html
 
 ## Why this exists
 
