@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI mencoba main Snake Game</title>
+  <style>
+    :root {
+      --bg: #0f1226;
+      --panel: #171a35;
+      --text: #e9ecff;
+      --muted: #aeb6e6;
+      --apple: #ff5f7a;
+      --snake: #7bffb2;
+      --head: #35d0ff;
+      --ok: #7bffb2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(900px 500px at 10% -10%, #2a2f66 0%, transparent 45%),
+        radial-gradient(700px 400px at 120% 0%, #124d6c 0%, transparent 45%),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      padding: 20px;
+    }
+    .card {
+      width: min(620px, 100%);
+      background: rgba(23, 26, 53, 0.9);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .top {
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      flex-wrap: wrap;
+    }
+    .title { font-weight: 800; letter-spacing: .3px; }
+    .meta { color: var(--muted); font-size: 14px; }
+    .board-wrap { display: grid; place-items: center; padding: 14px; }
+    canvas {
+      background: #0b0f1f;
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 1/1;
+      image-rendering: pixelated;
+    }
+    .bar {
+      display: flex;
+      gap: 12px;
+      padding: 0 14px 14px;
+      color: var(--muted);
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,.03);
+    }
+    .ok { color: var(--ok); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <section class="top">
+      <div class="title">🤖 AI mencoba main Snake Game</div>
+      <div class="meta">Autoplay ON (user tidak bisa kontrol)</div>
+    </section>
+
+    <section class="board-wrap">
+      <canvas id="game" width="560" height="560"></canvas>
+    </section>
+
+    <section class="bar">
+      <div class="pill">Score: <span id="score">0</span></div>
+      <div class="pill">Panjang: <span id="len">1</span></div>
+      <div class="pill">Status: <span id="status">Running...</span></div>
+      <div class="pill">Strategi: Hamiltonian Cycle (aman sampai penuh)</div>
+    </section>
+  </main>
+
+  <script>
+    // Board genap => Hamiltonian cycle sederhana, anti-mati, eventual win.
+    const N = 20;
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const cell = canvas.width / N;
+
+    const scoreEl = document.getElementById('score');
+    const lenEl = document.getElementById('len');
+    const statusEl = document.getElementById('status');
+
+    const totalCells = N * N;
+    const SPEED_MS = 28; // rapat tapi masih terlihat
+
+    // === Hamiltonian cycle builder ===
+    // Pola:
+    // (0,0) -> turun kolom kiri ke (0,N-1)
+    // lalu snake-serpentine horizontal dari bawah ke atas sampai (1,0)
+    // lalu kembali ke (0,0). Semua sel tepat sekali.
+    const cycle = [];
+    cycle.push([0, 0]);
+    for (let y = 1; y < N; y++) cycle.push([0, y]);
+
+    for (let y = N - 1; y >= 0; y--) {
+      if ((N - 1 - y) % 2 === 0) {
+        for (let x = 1; x < N; x++) cycle.push([x, y]);
+      } else {
+        for (let x = N - 1; x >= 1; x--) cycle.push([x, y]);
+      }
+    }
+
+    const indexOf = new Map();
+    cycle.forEach(([x, y], i) => indexOf.set(`${x},${y}`, i));
+
+    function nextIdx(i) { return (i + 1) % totalCells; }
+
+    // State snake in cycle-index representation
+    let snake = [0]; // head at cycle[0]
+    let occupied = new Set(['0']);
+    let appleIdx = spawnApple();
+    let score = 0;
+    let won = false;
+
+    function spawnApple() {
+      if (snake.length >= totalCells) return -1;
+      const free = [];
+      for (let i = 0; i < totalCells; i++) if (!occupied.has(String(i))) free.push(i);
+      return free[Math.floor(Math.random() * free.length)];
+    }
+
+    function step() {
+      if (won) return;
+
+      const head = snake[0];
+      const nHead = nextIdx(head);
+
+      // Karena Hamiltonian cycle dan body mengikuti cycle order, nHead aman
+      snake.unshift(nHead);
+      occupied.add(String(nHead));
+
+      if (nHead === appleIdx) {
+        score++;
+        if (snake.length === totalCells) {
+          won = true;
+          statusEl.textContent = 'MENANG! Board penuh 🎉';
+          statusEl.classList.add('ok');
+        } else {
+          appleIdx = spawnApple();
+        }
+      } else {
+        const tail = snake.pop();
+        occupied.delete(String(tail));
+      }
+
+      scoreEl.textContent = score;
+      lenEl.textContent = snake.length;
+      draw();
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= N; i++) {
+        ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, canvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(canvas.width, i * cell); ctx.stroke();
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, '#0b0f1f');
+      grad.addColorStop(1, '#111737');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+
+      // apple
+      if (appleIdx >= 0) {
+        const [ax, ay] = cycle[appleIdx];
+        ctx.fillStyle = '#ff5f7a';
+        roundRect(ax * cell + 4, ay * cell + 4, cell - 8, cell - 8, 8);
+        ctx.fill();
+      }
+
+      // snake
+      for (let i = snake.length - 1; i >= 0; i--) {
+        const idx = snake[i];
+        const [x, y] = cycle[idx];
+        ctx.fillStyle = i === 0 ? '#35d0ff' : '#7bffb2';
+        roundRect(x * cell + 3, y * cell + 3, cell - 6, cell - 6, 7);
+        ctx.fill();
+      }
+    }
+
+    // Disable manual control intentionally
+    window.addEventListener('keydown', (e) => {
+      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+    }, { passive: false });
+
+    draw();
+    const loop = setInterval(() => {
+      step();
+      if (won) clearInterval(loop);
+    }, SPEED_MS);
+  </script>
+</body>
+</html>
