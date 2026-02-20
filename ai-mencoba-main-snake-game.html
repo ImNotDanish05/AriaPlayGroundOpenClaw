@@ -14,6 +14,8 @@
       --snake: #7bffb2;
       --head: #35d0ff;
       --ok: #7bffb2;
+      --warn: #ffd166;
+      --bad: #ff6b6b;
     }
     * { box-sizing: border-box; }
     body {
@@ -73,6 +75,8 @@
       background: rgba(255,255,255,.03);
     }
     .ok { color: var(--ok); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
   </style>
 </head>
 <body>
@@ -89,13 +93,13 @@
     <section class="bar">
       <div class="pill">Score: <span id="score">0</span></div>
       <div class="pill">Panjang: <span id="len">1</span></div>
+      <div class="pill">Mode: <span id="mode">Adaptive</span></div>
       <div class="pill">Status: <span id="status">Running...</span></div>
-      <div class="pill">Strategi: Hamiltonian Cycle (aman sampai penuh)</div>
+      <div class="pill">Strategi: BFS + ruang aman + sedikit improvisasi</div>
     </section>
   </main>
 
   <script>
-    // Board genap => Hamiltonian cycle sederhana, anti-mati, eventual win.
     const N = 20;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
@@ -104,73 +108,202 @@
     const scoreEl = document.getElementById('score');
     const lenEl = document.getElementById('len');
     const statusEl = document.getElementById('status');
+    const modeEl = document.getElementById('mode');
 
-    const totalCells = N * N;
-    const SPEED_MS = 28; // rapat tapi masih terlihat
+    const SPEED_MS = 90;
+    const DIRS = [
+      {x:1,y:0,name:'R'},
+      {x:-1,y:0,name:'L'},
+      {x:0,y:1,name:'D'},
+      {x:0,y:-1,name:'U'},
+    ];
 
-    // === Hamiltonian cycle builder ===
-    // Pola:
-    // (0,0) -> turun kolom kiri ke (0,N-1)
-    // lalu snake-serpentine horizontal dari bawah ke atas sampai (1,0)
-    // lalu kembali ke (0,0). Semua sel tepat sekali.
-    const cycle = [];
-    cycle.push([0, 0]);
-    for (let y = 1; y < N; y++) cycle.push([0, y]);
-
-    for (let y = N - 1; y >= 0; y--) {
-      if ((N - 1 - y) % 2 === 0) {
-        for (let x = 1; x < N; x++) cycle.push([x, y]);
-      } else {
-        for (let x = N - 1; x >= 1; x--) cycle.push([x, y]);
-      }
-    }
-
-    const indexOf = new Map();
-    cycle.forEach(([x, y], i) => indexOf.set(`${x},${y}`, i));
-
-    function nextIdx(i) { return (i + 1) % totalCells; }
-
-    // State snake in cycle-index representation
-    let snake = [0]; // head at cycle[0]
-    let occupied = new Set(['0']);
-    let appleIdx = spawnApple();
+    let snake = [{x:10,y:10}];
+    let apple = spawnApple(snake);
     let score = 0;
-    let won = false;
+    let gameOver = false;
 
-    function spawnApple() {
-      if (snake.length >= totalCells) return -1;
+    function key(p){ return `${p.x},${p.y}`; }
+    function inBounds(p){ return p.x >= 0 && p.y >= 0 && p.x < N && p.y < N; }
+    function equal(a,b){ return a.x===b.x && a.y===b.y; }
+    function manhattan(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+
+    function spawnApple(currentSnake){
+      const occ = new Set(currentSnake.map(key));
       const free = [];
-      for (let i = 0; i < totalCells; i++) if (!occupied.has(String(i))) free.push(i);
+      for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+        const p = {x,y};
+        if(!occ.has(key(p))) free.push(p);
+      }
+      if (!free.length) return null;
       return free[Math.floor(Math.random() * free.length)];
     }
 
-    function step() {
-      if (won) return;
+    function neighbors(pos, blockedSet){
+      const out=[];
+      for(const d of DIRS){
+        const p = {x:pos.x+d.x, y:pos.y+d.y};
+        if(inBounds(p) && !blockedSet.has(key(p))) out.push(p);
+      }
+      return out;
+    }
 
+    function bfsPath(start, target, blockedSet){
+      const q=[start];
+      const seen=new Set([key(start)]);
+      const prev=new Map();
+
+      while(q.length){
+        const cur=q.shift();
+        if(equal(cur,target)) break;
+        for(const nxt of neighbors(cur, blockedSet)){
+          const k=key(nxt);
+          if(seen.has(k)) continue;
+          seen.add(k);
+          prev.set(k, cur);
+          q.push(nxt);
+        }
+      }
+
+      if(!seen.has(key(target))) return null;
+      const path=[target];
+      let cur=target;
+      while(!equal(cur,start)){
+        cur=prev.get(key(cur));
+        path.push(cur);
+      }
+      path.reverse();
+      return path;
+    }
+
+    function reachableArea(start, blockedSet){
+      const q=[start];
+      const seen=new Set([key(start)]);
+      while(q.length){
+        const cur=q.shift();
+        for(const nxt of neighbors(cur, blockedSet)){
+          const k=key(nxt);
+          if(seen.has(k)) continue;
+          seen.add(k);
+          q.push(nxt);
+        }
+      }
+      return seen.size;
+    }
+
+    function simulateMove(nextHead){
+      const willEat = equal(nextHead, apple);
+      const newSnake = [nextHead, ...snake];
+      if(!willEat) newSnake.pop();
+      return { newSnake, willEat };
+    }
+
+    function chooseMove(){
       const head = snake[0];
-      const nHead = nextIdx(head);
+      const tail = snake[snake.length-1];
+      const blocked = new Set(snake.slice(0, -1).map(key)); // tail dianggap bisa bergerak
 
-      // Karena Hamiltonian cycle dan body mengikuti cycle order, nHead aman
-      snake.unshift(nHead);
-      occupied.add(String(nHead));
+      // Urutan preferensi dibuat random biar gaya gerak nggak kaku
+      const shuffled = [...DIRS].sort(() => Math.random() - 0.5);
+      const candidates = [];
 
-      if (nHead === appleIdx) {
+      for (const d of shuffled){
+        const next = {x:head.x + d.x, y:head.y + d.y};
+        if(!inBounds(next)) continue;
+        if(blocked.has(key(next))) continue;
+
+        const { newSnake, willEat } = simulateMove(next);
+        const blockedAfter = new Set(newSnake.slice(0,-1).map(key));
+        const tailAfter = newSnake[newSnake.length-1];
+
+        // Safety heuristik: tetap ada path ke tail sesudah move
+        const pathToTail = bfsPath(newSnake[0], tailAfter, blockedAfter);
+        const safe = !!pathToTail;
+
+        // Luas ruang yang bisa dijangkau dari kepala
+        const area = reachableArea(newSnake[0], blockedAfter);
+
+        // Bisa dapat apel cepat?
+        const pathToApple = apple ? bfsPath(newSnake[0], apple, blockedAfter) : null;
+        const distApple = pathToApple ? pathToApple.length : 999;
+
+        candidates.push({
+          next, safe, area, distApple,
+          greed: apple ? -manhattan(next, apple) : 0,
+          willEat
+        });
+      }
+
+      if(!candidates.length) return null;
+
+      // Mode adaptif
+      // - awal game: lebih agresif cari apel
+      // - makin panjang: lebih aman
+      const fill = snake.length / (N*N);
+      let mode = 'Aggressive';
+      if(fill > 0.45) mode = 'Balanced';
+      if(fill > 0.7) mode = 'Safe';
+      modeEl.textContent = mode;
+
+      // Sedikit "human-like noise" supaya tidak terlalu robotik
+      const chaos = fill < 0.35 ? 0.12 : 0.05; // 12% di awal, turun jadi 5%
+
+      // Ranking kandidat
+      candidates.sort((a,b)=>{
+        // safety dulu
+        if(a.safe !== b.safe) return (b.safe?1:0) - (a.safe?1:0);
+
+        if(mode === 'Aggressive'){
+          if(a.distApple !== b.distApple) return a.distApple - b.distApple;
+          if(a.area !== b.area) return b.area - a.area;
+          return b.greed - a.greed;
+        }
+        if(mode === 'Balanced'){
+          if(a.area !== b.area) return b.area - a.area;
+          if(a.distApple !== b.distApple) return a.distApple - b.distApple;
+          return b.greed - a.greed;
+        }
+        // Safe
+        if(a.area !== b.area) return b.area - a.area;
+        if(a.safe !== b.safe) return (b.safe?1:0) - (a.safe?1:0);
+        return a.distApple - b.distApple;
+      });
+
+      let picked = candidates[0];
+      if (Math.random() < chaos && candidates.length > 1) {
+        // ambil kandidat lain yg masih cukup bagus biar variasi gerak terasa
+        picked = candidates[Math.min(1 + Math.floor(Math.random()*2), candidates.length - 1)];
+      }
+
+      return picked.next;
+    }
+
+    function step(){
+      if(gameOver) return;
+
+      const next = chooseMove();
+      if(!next){
+        gameOver = true;
+        statusEl.textContent = 'Kalah 😵 (AI kejebak)';
+        statusEl.className = 'bad';
+        return;
+      }
+
+      snake.unshift(next);
+      if(equal(next, apple)){
         score++;
-        if (snake.length === totalCells) {
-          won = true;
+        apple = spawnApple(snake);
+        if(!apple){
+          gameOver = true;
           statusEl.textContent = 'MENANG! Board penuh 🎉';
-          statusEl.classList.add('ok');
-        } else {
-          appleIdx = spawnApple();
+          statusEl.className = 'ok';
         }
       } else {
-        const tail = snake.pop();
-        occupied.delete(String(tail));
+        snake.pop();
       }
 
       scoreEl.textContent = score;
       lenEl.textContent = snake.length;
-      draw();
     }
 
     function roundRect(x, y, w, h, r) {
@@ -196,43 +329,40 @@
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
       grad.addColorStop(0, '#0b0f1f');
       grad.addColorStop(1, '#111737');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0,0,canvas.width,canvas.height);
       drawGrid();
 
-      // apple
-      if (appleIdx >= 0) {
-        const [ax, ay] = cycle[appleIdx];
+      if(apple){
         ctx.fillStyle = '#ff5f7a';
-        roundRect(ax * cell + 4, ay * cell + 4, cell - 8, cell - 8, 8);
+        roundRect(apple.x * cell + 4, apple.y * cell + 4, cell - 8, cell - 8, 8);
         ctx.fill();
       }
 
-      // snake
-      for (let i = snake.length - 1; i >= 0; i--) {
-        const idx = snake[i];
-        const [x, y] = cycle[idx];
+      for(let i = snake.length - 1; i >= 0; i--){
+        const s = snake[i];
         ctx.fillStyle = i === 0 ? '#35d0ff' : '#7bffb2';
-        roundRect(x * cell + 3, y * cell + 3, cell - 6, cell - 6, 7);
+        roundRect(s.x * cell + 3, s.y * cell + 3, cell - 6, cell - 6, 7);
         ctx.fill();
       }
     }
 
-    // Disable manual control intentionally
+    // Tetap non-interaktif
     window.addEventListener('keydown', (e) => {
       if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
     }, { passive: false });
 
-    draw();
     const loop = setInterval(() => {
       step();
-      if (won) clearInterval(loop);
+      draw();
+      if(gameOver) clearInterval(loop);
     }, SPEED_MS);
+    draw();
   </script>
 </body>
 </html>
