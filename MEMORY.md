@@ -13,3 +13,4 @@ Jangan hanya mengandalkan history chat. Gunakan file memori sebagai sumber utama
 ## Preferensi Penting (Wajib Ingat)
 - Keyword trigger: **"JARKOMAN"**
 - Jika pesan user berisi keyword tersebut, langsung buat/masukkan entri ke Notion (database/kalender yang sudah diotorisasi).
+- Saat membuat/update entri Notion, isi deskripsi detail di properti **"Notes"** (bukan hanya judul).
