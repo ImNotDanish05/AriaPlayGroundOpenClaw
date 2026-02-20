@@ -9,3 +9,7 @@ Prioritas baca:
 2. `MEMORY.md` (ringkasan jangka panjang)
 
 Jangan hanya mengandalkan history chat. Gunakan file memori sebagai sumber utama konteks.
+
+## Preferensi Penting (Wajib Ingat)
+- Keyword trigger: **"JARKOMAN"**
+- Jika pesan user berisi keyword tersebut, langsung buat/masukkan entri ke Notion (database/kalender yang sudah diotorisasi).
