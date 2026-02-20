@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snake Game - Aria</title>
+  <style>
+    :root {
+      --bg: #0f1226;
+      --panel: #171a35;
+      --text: #e9ecff;
+      --muted: #aeb6e6;
+      --accent: #7bffb2;
+      --apple: #ff5f7a;
+      --snake: #7bffb2;
+      --snakeHead: #35d0ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(900px 500px at 10% -10%, #2a2f66 0%, transparent 45%),
+        radial-gradient(700px 400px at 120% 0%, #124d6c 0%, transparent 45%),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      padding: 20px;
+    }
+
+    .card {
+      width: min(560px, 100%);
+      background: rgba(23, 26, 53, 0.9);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+
+    .top {
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .title {
+      font-weight: 800;
+      letter-spacing: .3px;
+    }
+
+    .score {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .board-wrap {
+      display: grid;
+      place-items: center;
+      padding: 14px;
+    }
+
+    canvas {
+      background: #0b0f1f;
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 500px;
+      aspect-ratio: 1/1;
+      image-rendering: pixelated;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      padding: 0 14px 14px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(90deg, #7bffb2, #35d0ff);
+      color: #0b1220;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 0 14px 16px;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      font-weight: 800;
+      text-align: center;
+      color: #ffffff;
+      text-shadow: 0 3px 18px rgba(0,0,0,0.6);
+      font-size: clamp(20px, 3vw, 30px);
+    }
+
+    .canvas-holder {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 54px);
+      gap: 6px;
+      margin-left: auto;
+    }
+
+    .dpad button {
+      padding: 10px;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .dpad .empty { visibility: hidden; }
+
+    @media (max-width: 520px) {
+      .controls { justify-content: center; }
+      .dpad { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div class="title">🐍 Snake Game - Aria Edition</div>
+      <div class="score">Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
+    </div>
+
+    <div class="board-wrap">
+      <div class="canvas-holder">
+        <canvas id="game" width="500" height="500"></canvas>
+        <div class="overlay" id="overlay">Tekan Start / Spasi untuk main</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn">Start / Restart</button>
+      <button id="pauseBtn">Pause</button>
+
+      <div class="dpad" aria-label="mobile controls">
+        <span class="empty"></span>
+        <button data-dir="up">⬆️</button>
+        <span class="empty"></span>
+        <button data-dir="left">⬅️</button>
+        <button data-dir="down">⬇️</button>
+        <button data-dir="right">➡️</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      Kontrol: ⬅️⬆️⬇️➡️ (keyboard) / tombol panah di layar. Jangan nabrak dinding atau badan sendiri 😆
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    const gridCount = 20;
+    const cell = canvas.width / gridCount;
+    const SPEED = 115;
+
+    let snake, dir, nextDir, apple, score, best, gameOver, running, loop;
+
+    best = Number(localStorage.getItem('aria_snake_best') || 0);
+    bestEl.textContent = best;
+
+    function randomCell() {
+      return {
+        x: Math.floor(Math.random() * gridCount),
+        y: Math.floor(Math.random() * gridCount)
+      };
+    }
+
+    function spawnApple() {
+      let pos;
+      do {
+        pos = randomCell();
+      } while (snake.some(s => s.x === pos.x && s.y === pos.y));
+      apple = pos;
+    }
+
+    function reset() {
+      snake = [{ x: 10, y: 10 }];
+      dir = { x: 1, y: 0 };
+      nextDir = { x: 1, y: 0 };
+      score = 0;
+      gameOver = false;
+      running = true;
+      scoreEl.textContent = score;
+      overlay.textContent = '';
+      spawnApple();
+      clearInterval(loop);
+      loop = setInterval(tick, SPEED);
+      draw();
+    }
+
+    function pauseToggle() {
+      if (gameOver) return;
+      running = !running;
+      overlay.textContent = running ? '' : 'Paused';
+    }
+
+    function setDirection(newDir) {
+      if (!running || gameOver) return;
+      // prevent immediate reverse
+      if (snake.length > 1 && newDir.x === -dir.x && newDir.y === -dir.y) return;
+      nextDir = newDir;
+    }
+
+    function tick() {
+      if (!running || gameOver) return;
+
+      dir = nextDir;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+      // wall collision
+      if (head.x < 0 || head.y < 0 || head.x >= gridCount || head.y >= gridCount) {
+        endGame();
+        return;
+      }
+
+      // self collision
+      if (snake.some(s => s.x === head.x && s.y === head.y)) {
+        endGame();
+        return;
+      }
+
+      snake.unshift(head);
+
+      if (head.x === apple.x && head.y === apple.y) {
+        score++;
+        scoreEl.textContent = score;
+        spawnApple();
+      } else {
+        snake.pop();
+      }
+
+      draw();
+    }
+
+    function endGame() {
+      gameOver = true;
+      running = false;
+      overlay.innerHTML = `Game Over<br>Score: ${score}<br>Tekan Start untuk main lagi`;
+      if (score > best) {
+        best = score;
+        localStorage.setItem('aria_snake_best', String(best));
+        bestEl.textContent = best;
+      }
+    }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= gridCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cell, 0);
+        ctx.lineTo(i * cell, canvas.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i * cell);
+        ctx.lineTo(canvas.width, i * cell);
+        ctx.stroke();
+      }
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // background
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, '#0b0f1f');
+      grad.addColorStop(1, '#111737');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawGrid();
+
+      // apple
+      ctx.fillStyle = '#ff5f7a';
+      roundRect(apple.x * cell + 4, apple.y * cell + 4, cell - 8, cell - 8, 8);
+      ctx.fill();
+
+      // snake
+      snake.forEach((seg, i) => {
+        ctx.fillStyle = i === 0 ? '#35d0ff' : '#7bffb2';
+        roundRect(seg.x * cell + 3, seg.y * cell + 3, cell - 6, cell - 6, 7);
+        ctx.fill();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!running && !gameOver) pauseToggle();
+        else if (gameOver || !loop) reset();
+        return;
+      }
+
+      if (e.key === 'ArrowUp') setDirection({ x: 0, y: -1 });
+      if (e.key === 'ArrowDown') setDirection({ x: 0, y: 1 });
+      if (e.key === 'ArrowLeft') setDirection({ x: -1, y: 0 });
+      if (e.key === 'ArrowRight') setDirection({ x: 1, y: 0 });
+    });
+
+    document.querySelectorAll('[data-dir]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const d = btn.dataset.dir;
+        if (d === 'up') setDirection({ x: 0, y: -1 });
+        if (d === 'down') setDirection({ x: 0, y: 1 });
+        if (d === 'left') setDirection({ x: -1, y: 0 });
+        if (d === 'right') setDirection({ x: 1, y: 0 });
+      });
+    });
+
+    startBtn.addEventListener('click', reset);
+    pauseBtn.addEventListener('click', pauseToggle);
+
+    draw();
+  </script>
+</body>
+</html>
