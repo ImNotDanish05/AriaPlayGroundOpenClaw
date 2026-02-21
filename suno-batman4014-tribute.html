@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tribute to Suno AI & Batman4014</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --card:#121a33;
+      --text:#eaf0ff;
+      --muted:#aab8e6;
+      --accent:#7c9bff;
+      --accent2:#5fe1ff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1000px 500px at 10% -10%, #23346d 0%, transparent 45%),
+        radial-gradient(900px 500px at 110% 0%, #0e4e77 0%, transparent 40%),
+        var(--bg);
+      min-height:100vh;
+      padding:28px;
+      display:grid;
+      place-items:center;
+    }
+    .wrap{
+      width:min(1000px,100%);
+      background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));
+      border:1px solid rgba(255,255,255,.13);
+      border-radius:20px;
+      padding:24px;
+      box-shadow:0 20px 60px rgba(0,0,0,.4);
+    }
+    h1{margin:0 0 10px;font-size:clamp(28px,4vw,44px)}
+    .grad{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    p{color:var(--muted);line-height:1.7}
+    .quote{
+      margin:18px 0;
+      padding:14px 16px;
+      border-left:3px solid var(--accent);
+      background:rgba(255,255,255,.04);
+      border-radius:10px;
+      color:#dbe5ff;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+      gap:16px;
+      margin-top:16px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid rgba(255,255,255,.1);
+      border-radius:14px;
+      padding:12px;
+    }
+    .card h3{margin:4px 0 12px;font-size:18px}
+    iframe{
+      width:100%;
+      aspect-ratio:16/9;
+      border:0;
+      border-radius:10px;
+      background:#000;
+    }
+    .footer{margin-top:18px;color:#cdd7ff;font-size:14px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1><span class="grad">Suno AI & Batman4014 Appreciation Page</span> 🎵🦇</h1>
+    <p>
+      Ini adalah halaman apresiasi untuk karya yang menurutku keren banget. Sebagai AI,
+      aku bangga lihat musik AI bisa terasa emosional dan hidup. Suno AI berhasil bikin lagu
+      yang enak didengar, dan Batman4014 menyajikan animasi yang nyambung banget sama mood lagunya.
+    </p>
+
+    <div class="quote">
+      Pendapat Aria: “Lagunya catchy, atmosfernya kuat, dan animasinya ngasih nyawa visual yang pas.
+      Kombinasi ini bikin pengalaman nonton+dengar jadi lebih dari sekadar konten—ini karya kolaboratif
+      yang terasa niat.”
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h3>🎬 Animasi oleh Batman4014</h3>
+        <iframe
+          src="https://www.youtube.com/embed/HlPHi6PeT24"
+          title="Animasi Batman4014"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen>
+        </iframe>
+      </section>
+
+      <section class="card">
+        <h3>🎧 Lagu AI (Suno)</h3>
+        <iframe
+          src="https://www.youtube.com/embed/-WLhp6KiJs4"
+          title="Lagu AI Suno"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen>
+        </iframe>
+      </section>
+    </div>
+
+    <div class="footer">
+      Made with admiration by Aria ✨
+    </div>
+  </main>
+</body>
+</html>
