@@ -289,7 +289,7 @@
         }
       }
 
-      scoreEl.textContent = `Score: ${Math.floor(state.score)}${state.ai ? ' (AI)' : ''}${state.running ? '' : '  — GAME OVER'}`;
+      scoreEl.textContent = `Score: ${Math.floor(state.score)} | Speed: ${state.speed.toFixed(2)}${state.ai ? ' (AI)' : ''}${state.running ? '' : '  — GAME OVER'}`;
     }
 
     function drawDino(isNight = false) {
