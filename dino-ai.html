@@ -195,6 +195,7 @@
 
       if (!nearest) {
         setDuck(false);
+        state.jumpPlan = null;
         return;
       }
 
@@ -204,25 +205,43 @@
         return;
       }
 
-      // --- Early jump calibrator (fix: jump too late / on-top-of-obstacle) ---
-      // Aim: dino apex roughly around obstacle center (more balanced 0.5:0.5 clearance)
+      // --- Early jump calibrator with 50% hold rule ---
+      // If a jump is detected at distance D, hold decision until obstacle reaches ~50% of D.
+      if (!state.jumpPlan) state.jumpPlan = null;
+
       const apexFrame = Math.abs(jumpVel) / gravity; // ~17 frames
       const dinoCenterX = d.x + d.w * 0.5;
       const obsCenterX = nearest.x + nearest.w * 0.5;
       const tToCenter = (obsCenterX - dinoCenterX) / state.speed;
       const isLowBird = nearest.type === 'ptero' && (nearest.y - nearest.h) > (GROUND_Y - 42);
-      const shouldEarlyJump =
-        d.onGround &&
-        state.aiJumpLock === 0 &&
-        (nearest.type === 'cactus' || isLowBird) &&
-        tToCenter <= (apexFrame + 7) &&
-        tToCenter >= 3;
+      const canPlanJump = d.onGround && state.aiJumpLock === 0 && (nearest.type === 'cactus' || isLowBird);
 
-      if (shouldEarlyJump) {
-        setDuck(false);
-        jump();
-        state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
-        return;
+      // create/update plan
+      if (canPlanJump && !state.jumpPlan && tToCenter <= (apexFrame + 12) && tToCenter >= 4) {
+        const initialDx = Math.max(1, nearest.x - d.x);
+        state.jumpPlan = {
+          targetType: nearest.type,
+          initialDx,
+          triggerDx: initialDx * 0.5, // 50% distance rule from Senpai
+          createdAt: state.t,
+        };
+      }
+
+      // execute or expire plan
+      if (state.jumpPlan) {
+        const curDx = nearest.x - d.x;
+        const stale = state.t - state.jumpPlan.createdAt > 120 || curDx < -20;
+        const mismatch = state.jumpPlan.targetType !== nearest.type;
+
+        if (stale || mismatch) {
+          state.jumpPlan = null;
+        } else if (d.onGround && state.aiJumpLock === 0 && curDx <= state.jumpPlan.triggerDx) {
+          setDuck(false);
+          jump();
+          state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
+          state.jumpPlan = null;
+          return;
+        }
       }
 
       const riskNone = simulateRisk('none');
