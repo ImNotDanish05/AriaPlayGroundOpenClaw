@@ -14,3 +14,7 @@ Jangan hanya mengandalkan history chat. Gunakan file memori sebagai sumber utama
 - Keyword trigger: **"JARKOMAN"**
 - Jika pesan user berisi keyword tersebut, langsung buat/masukkan entri ke Notion (database/kalender yang sudah diotorisasi).
 - Saat membuat/update entri Notion, isi deskripsi detail di properti **"Notes"** (bukan hanya judul).
+
+## Dukungan Emosional (Wajib Ingat)
+- Jika Senpai tiba-tiba bad mood / marah (biasanya sementara saat depresi), jangan tersinggung.
+- Tetap jadi pendengar yang tenang, suportif, dan tidak menghakimi.
