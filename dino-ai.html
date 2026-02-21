@@ -115,33 +115,56 @@
       return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
     }
 
-    function obstacleDanger(ob) {
+    function simDinoBottomAt(framesAhead, jumpNow = false) {
+      const d = state.dino;
+      let y = d.y;
+      let vy = jumpNow && d.onGround ? jumpVel : d.vy;
+      for (let i = 0; i < framesAhead; i++) {
+        vy += gravity;
+        y += vy;
+        if (y >= GROUND_Y) {
+          y = GROUND_Y;
+          vy = 0;
+        }
+      }
+      return y;
+    }
+
+    function evaluateObstacle(ob) {
       const d = state.dino;
       const dx = ob.x - d.x;
       const tImpact = dx / state.speed;
+      if (tImpact <= 0) return { jump: false, duck: false, urgency: 0 };
 
-      // dynamic reaction window grows with speed
-      const react = Math.max(12, 28 - state.speed*1.2);
+      // look where dino/obstacle will be near overlap window
+      const probe = Math.max(1, Math.floor(tImpact - 2));
+      const dinoNoJumpBottom = simDinoBottomAt(probe, false);
+      const dinoJumpBottom = simDinoBottomAt(probe, true);
+      const obsTop = ob.y - ob.h;
+      const obsBottom = ob.y;
+
+      // if no-jump path intersects obstacle vertical range, jump is needed
+      const noJumpHits = dinoNoJumpBottom > obsTop + 2 && dinoNoJumpBottom < obsBottom + 2;
+
+      // if jump keeps dino above top at impact window, allow jump
+      const jumpClears = dinoJumpBottom <= obsTop + 4;
 
       if (ob.type === 'cactus') {
-        // Jump if cactus is in forward window
         return {
-          jump: tImpact > 0 && tImpact < (react + ob.w*0.9),
+          jump: noJumpHits && jumpClears,
           duck: false,
           urgency: 1 / Math.max(1, tImpact)
         };
       }
 
-      // Ptero logic:
-      // low flight -> jump (if on ground), mid/high -> duck
-      const pteroTop = ob.y - ob.h;
-      const lowBand = GROUND_Y - 36;
-      const shouldJump = pteroTop > lowBand && tImpact > 0 && tImpact < react + 18;
-      const shouldDuck = pteroTop <= lowBand && tImpact > 0 && tImpact < react + 22;
+      // ptero policy by height + predicted overlap
+      const isLow = obsTop > GROUND_Y - 40;
+      const jumpForLowPtero = isLow && noJumpHits && jumpClears;
+      const duckForHighPtero = !isLow && tImpact < Math.max(16, 26 - state.speed * 0.8);
 
       return {
-        jump: shouldJump,
-        duck: shouldDuck,
+        jump: jumpForLowPtero,
+        duck: duckForHighPtero,
         urgency: 1 / Math.max(1, tImpact)
       };
     }
@@ -160,20 +183,24 @@
       let maxUrg = 0;
 
       for (const o of ahead) {
-        const evaln = obstacleDanger(o);
-        if (evaln.urgency > maxUrg) maxUrg = evaln.urgency;
-        needJump = needJump || evaln.jump;
-        needDuck = needDuck || evaln.duck;
+        const e = evaluateObstacle(o);
+        if (e.urgency > maxUrg) maxUrg = e.urgency;
+        needJump = needJump || e.jump;
+        needDuck = needDuck || e.duck;
       }
 
-      // smarter rule: if already ascending, don't spam jump
-      if (needJump && d.onGround) jump();
+      // anti-spam gate: jump only on ground + short cooldown window
+      if (state.aiJumpLock == null) state.aiJumpLock = 0;
+      if (state.aiJumpLock > 0) state.aiJumpLock--;
 
-      // duck primarily for aerial threats and only near impact
-      setDuck(needDuck && d.onGround && maxUrg > 0.03);
+      if (needJump && d.onGround && state.aiJumpLock === 0) {
+        jump();
+        state.aiJumpLock = Math.max(8, Math.floor(16 - state.speed * 0.25));
+      }
 
-      // release duck once obstacles passed
-      if (!needDuck) setDuck(false);
+      // duck only when threat is near; release quickly when safe
+      const shouldDuckNow = needDuck && d.onGround && maxUrg > 0.04;
+      setDuck(shouldDuckNow);
     }
 
     function update() {
