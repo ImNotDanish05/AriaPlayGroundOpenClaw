@@ -115,152 +115,98 @@
       return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
     }
 
-    function simulateRisk(action) {
+    function classifyPtero(ob) {
+      const top = ob.y - ob.h;
+      if (top > GROUND_Y - 40) return 'low';
+      if (top > GROUND_Y - 70) return 'mid';
+      return 'high';
+    }
+
+    function getNearestObstacle() {
       const d = state.dino;
-      const sim = {
-        x: d.x,
-        y: d.y,
-        vy: d.vy,
-        onGround: d.onGround,
-        ducking: action === 'duck' && d.onGround,
-      };
+      return state.obstacles
+        .filter(o => o.x + o.w > d.x - 8)
+        .sort((a,b)=>a.x-b.x)[0] || null;
+    }
 
-      if (action === 'jump' && sim.onGround) {
-        sim.vy = jumpVel;
-        sim.onGround = false;
-        sim.ducking = false;
+    function computeJumpTrigger(ob) {
+      // Heuristic from common dino bots: threshold grows with speed and obstacle width.
+      // Tuned to avoid "jump exactly on top" by biasing earlier jump.
+      const v = state.speed;
+      if (ob.type === 'cactus') {
+        return 72 + v * 6.2 + ob.w * 0.65;
       }
-
-      // clone near obstacles only (performance)
-      const obs = state.obstacles
-        .filter(o => o.x + o.w > d.x - 20 && o.x < d.x + 520)
-        .slice(0, 4)
-        .map(o => ({ ...o }));
-
-      const horizon = Math.max(55, Math.floor(92 - state.speed * 1.5));
-      let risk = 0;
-
-      for (let i = 0; i < horizon; i++) {
-        // physics
-        sim.vy += gravity;
-        sim.y += sim.vy;
-        if (sim.y >= GROUND_Y) {
-          sim.y = GROUND_Y;
-          sim.vy = 0;
-          sim.onGround = true;
-        } else {
-          sim.onGround = false;
-        }
-
-        // if not explicitly duck action, auto release duck after frame 0
-        if (i > 0 && action !== 'duck') sim.ducking = false;
-        if (!sim.onGround) sim.ducking = false;
-
-        const h = sim.ducking && sim.onGround ? 30 : 48;
-        const w = sim.ducking && sim.onGround ? 56 : 44;
-        const dBox = { x: sim.x + 4, y: sim.y - h + 3, w: w - 8, h: h - 6 };
-
-        for (const o of obs) {
-          o.x -= state.speed;
-          const hit = { x: o.x + 3, y: o.y - o.h + 2, w: o.w - 6, h: o.h - 4 };
-          const overlap = dBox.x < hit.x + hit.w && dBox.x + dBox.w > hit.x && dBox.y < hit.y + hit.h && dBox.y + dBox.h > hit.y;
-          if (overlap) {
-            // heavy penalty for predicted collision; sooner collision = worse
-            risk += 10000 - i * 80;
-          }
-
-          // soft penalty: being too close to obstacle front while descending
-          const dx = hit.x - (dBox.x + dBox.w);
-          if (dx > -10 && dx < 18 && sim.vy > 0) risk += 12;
-        }
-      }
-
-      // discourage useless jumps/ducks when safe
-      if (action === 'jump' && risk < 5000) risk += 28;
-      if (action === 'duck' && risk < 5000) risk += 12;
-      return risk;
+      const band = classifyPtero(ob);
+      if (band === 'low') return 78 + v * 5.8;
+      return Infinity; // mid/high ptero should duck, not jump
     }
 
     function aiControl() {
       if (!state.ai || !state.running) return;
       const d = state.dino;
 
-      // jump cooldown to avoid spam-bounce
       if (state.aiJumpLock == null) state.aiJumpLock = 0;
       if (state.aiJumpLock > 0) state.aiJumpLock--;
+      if (state.aiPlan == null) state.aiPlan = null;
 
-      const nearest = state.obstacles
-        .filter(o => o.x + o.w > d.x - 8)
-        .sort((a,b)=>a.x-b.x)[0];
-
+      const nearest = getNearestObstacle();
       if (!nearest) {
         setDuck(false);
-        state.jumpPlan = null;
+        state.aiPlan = null;
         return;
       }
 
       const dx = nearest.x - d.x;
-      if (dx > 280) {
+      if (dx > 340) {
         setDuck(false);
+        state.aiPlan = null;
         return;
       }
 
-      // --- Early jump calibrator with 50% hold rule ---
-      // If a jump is detected at distance D, hold decision until obstacle reaches ~50% of D.
-      if (!state.jumpPlan) state.jumpPlan = null;
+      // Duck logic for ptero mid/high, close window only.
+      if (nearest.type === 'ptero') {
+        const band = classifyPtero(nearest);
+        if (band !== 'low') {
+          const shouldDuck = d.onGround && dx < (120 + state.speed * 2.2) && dx > -26;
+          setDuck(shouldDuck);
+        } else {
+          setDuck(false);
+        }
+      } else {
+        setDuck(false);
+      }
 
-      const apexFrame = Math.abs(jumpVel) / gravity; // ~17 frames
-      const dinoCenterX = d.x + d.w * 0.5;
-      const obsCenterX = nearest.x + nearest.w * 0.5;
-      const tToCenter = (obsCenterX - dinoCenterX) / state.speed;
-      const isLowBird = nearest.type === 'ptero' && (nearest.y - nearest.h) > (GROUND_Y - 42);
-      const canPlanJump = d.onGround && state.aiJumpLock === 0 && (nearest.type === 'cactus' || isLowBird);
+      // Build a stable jump plan (prevents jitter / repeated re-planning)
+      const jumpTrigger = computeJumpTrigger(nearest);
+      const jumpable = Number.isFinite(jumpTrigger) && d.onGround && state.aiJumpLock === 0;
 
-      // create/update plan
-      if (canPlanJump && !state.jumpPlan && tToCenter <= (apexFrame + 12) && tToCenter >= 4) {
-        const initialDx = Math.max(1, nearest.x - d.x);
-        state.jumpPlan = {
-          targetType: nearest.type,
+      if (jumpable && !state.aiPlan) {
+        const initialDx = Math.max(1, dx);
+        state.aiPlan = {
+          obstacleRef: nearest,
           initialDx,
-          triggerDx: initialDx * 0.5, // 50% distance rule from Senpai
-          createdAt: state.t,
+          triggerDx: Math.min(jumpTrigger, initialDx * 0.58), // ~50-60% hold from first detection
+          expiryTick: state.t + 90
         };
       }
 
-      // execute or expire plan
-      if (state.jumpPlan) {
-        const curDx = nearest.x - d.x;
-        const stale = state.t - state.jumpPlan.createdAt > 120 || curDx < -20;
-        const mismatch = state.jumpPlan.targetType !== nearest.type;
+      if (!state.aiPlan) return;
 
-        if (stale || mismatch) {
-          state.jumpPlan = null;
-        } else if (d.onGround && state.aiJumpLock === 0 && curDx <= state.jumpPlan.triggerDx) {
-          setDuck(false);
-          jump();
-          state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
-          state.jumpPlan = null;
-          return;
-        }
-      }
-
-      const riskNone = simulateRisk('none');
-      const riskDuck = d.onGround ? simulateRisk('duck') : Infinity;
-      const riskJump = (d.onGround && state.aiJumpLock === 0) ? simulateRisk('jump') : Infinity;
-
-      const best = Math.min(riskNone, riskDuck, riskJump);
-
-      if (best === riskJump && riskJump + 100 < riskNone) {
-        setDuck(false);
-        jump();
-        state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
+      const plan = state.aiPlan;
+      const stale = state.t > plan.expiryTick || !state.obstacles.includes(plan.obstacleRef);
+      if (stale) {
+        state.aiPlan = null;
         return;
       }
 
-      if (best === riskDuck && riskDuck + 40 < riskNone) {
-        setDuck(true);
-      } else {
-        setDuck(false);
+      const curDx = plan.obstacleRef.x - d.x;
+      // safety: force jump if already too close to jumpable obstacle
+      const urgent = curDx < 34 + state.speed * 1.1;
+
+      if (d.onGround && state.aiJumpLock === 0 && (curDx <= plan.triggerDx || urgent)) {
+        jump();
+        state.aiJumpLock = Math.max(9, Math.floor(17 - state.speed * 0.28));
+        state.aiPlan = null;
       }
     }
 
