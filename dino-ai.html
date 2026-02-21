@@ -117,8 +117,10 @@
 
     function classifyPtero(ob) {
       const top = ob.y - ob.h;
-      if (top > GROUND_Y - 40) return 'low';
-      if (top > GROUND_Y - 70) return 'mid';
+      // Tuned to this game's spawn heights:
+      // low ~ top 160, mid ~132, high ~102 (GROUND=210, bird h=30)
+      if (top > GROUND_Y - 62) return 'low';
+      if (top > GROUND_Y - 92) return 'mid';
       return 'high';
     }
 
@@ -163,43 +165,57 @@
         return;
       }
 
-      // NEW duck logic: trigger close to impact + hold until bird fully passes dino.
+      // REBUILT duck logic (reference style: distance + target lock + release-after-pass)
+      if (state.duckTarget == null) state.duckTarget = null;
       if (state.duckHoldUntil == null) state.duckHoldUntil = 0;
-      if (nearest.type === 'ptero' && d.onGround) {
-        const band = classifyPtero(nearest);
-        if (band !== 'low') {
-          // Predict hit relevance only for standing body.
-          const birdTop = nearest.y - nearest.h + 2;
-          const birdBottom = nearest.y - 2;
-          const standTop = GROUND_Y - 48 + 3;
-          const standBottom = GROUND_Y - 3;
-          const canHitStanding = birdBottom > standTop && birdTop < standBottom;
 
-          const dinoLeft = d.x + 4;
-          const dinoRight = dinoLeft + 36; // standing hitbox width
-          const birdLeft = nearest.x + 3;
-          const birdRight = nearest.x + nearest.w - 3;
-          const frontGap = birdLeft - dinoRight;
+      // Continue duck if we already locked onto a bird target.
+      if (state.duckTarget) {
+        const b = state.duckTarget;
+        const dinoLeft = d.x + 4;
+        const birdRight = b.x + b.w - 3;
+        const passed = birdRight < dinoLeft - 10;
 
-          // Start duck when bird is actually close (not too early).
-          const startGap = 46 + state.speed * 0.9;
-          const shouldStartDuck = canHitStanding && frontGap <= startGap && birdRight > dinoLeft;
+        if (passed) {
+          // tiny tail hold so no instant stand-up collision
+          if (state.duckHoldUntil === 0) state.duckHoldUntil = state.t + Math.floor(8 + state.speed * 0.35);
+        }
 
-          if (shouldStartDuck) {
-            // Hold a bit past crossing so it won't stand up into the bird.
-            state.duckHoldUntil = Math.max(state.duckHoldUntil, state.t + Math.floor(14 + state.speed * 0.4));
-          }
-
-          const birdPassed = birdRight < dinoLeft - 8;
-          const keepDuck = !birdPassed || state.t <= state.duckHoldUntil;
-          setDuck(shouldStartDuck || keepDuck);
-        } else {
-          // low bird: prefer jump logic, do not duck.
-          setDuck(false);
+        const keep = d.onGround && (!passed || state.t <= state.duckHoldUntil) && state.obstacles.includes(b);
+        setDuck(keep);
+        if (!keep) {
+          state.duckTarget = null;
           state.duckHoldUntil = 0;
         }
       } else {
-        if (state.t > state.duckHoldUntil) setDuck(false);
+        // Acquire new duck target only for ptero mid/high and when truly close.
+        if (nearest.type === 'ptero' && d.onGround) {
+          const band = classifyPtero(nearest);
+          if (band === 'mid' || band === 'high') {
+            const dinoLeft = d.x + 4;
+            const dinoRight = dinoLeft + 36;
+            const birdLeft = nearest.x + 3;
+            const birdRight = nearest.x + nearest.w - 3;
+            const frontGap = birdLeft - dinoRight;
+
+            // Start duck late enough (avoid early crouch), but safe at higher speed.
+            const startGap = 26 + state.speed * 1.15;
+            const shouldAcquire = frontGap <= startGap && birdRight > dinoLeft;
+
+            if (shouldAcquire) {
+              state.duckTarget = nearest;
+              state.duckHoldUntil = 0;
+              setDuck(true);
+            } else {
+              setDuck(false);
+            }
+          } else {
+            // low bird handled by jump logic
+            setDuck(false);
+          }
+        } else {
+          setDuck(false);
+        }
       }
 
       // Build a stable jump plan (prevents jitter / repeated re-planning)
