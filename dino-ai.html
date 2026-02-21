@@ -115,92 +115,114 @@
       return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
     }
 
-    function simDinoBottomAt(framesAhead, jumpNow = false) {
+    function simulateRisk(action) {
       const d = state.dino;
-      let y = d.y;
-      let vy = jumpNow && d.onGround ? jumpVel : d.vy;
-      for (let i = 0; i < framesAhead; i++) {
-        vy += gravity;
-        y += vy;
-        if (y >= GROUND_Y) {
-          y = GROUND_Y;
-          vy = 0;
+      const sim = {
+        x: d.x,
+        y: d.y,
+        vy: d.vy,
+        onGround: d.onGround,
+        ducking: action === 'duck' && d.onGround,
+      };
+
+      if (action === 'jump' && sim.onGround) {
+        sim.vy = jumpVel;
+        sim.onGround = false;
+        sim.ducking = false;
+      }
+
+      // clone near obstacles only (performance)
+      const obs = state.obstacles
+        .filter(o => o.x + o.w > d.x - 20 && o.x < d.x + 520)
+        .slice(0, 4)
+        .map(o => ({ ...o }));
+
+      const horizon = Math.max(55, Math.floor(92 - state.speed * 1.5));
+      let risk = 0;
+
+      for (let i = 0; i < horizon; i++) {
+        // physics
+        sim.vy += gravity;
+        sim.y += sim.vy;
+        if (sim.y >= GROUND_Y) {
+          sim.y = GROUND_Y;
+          sim.vy = 0;
+          sim.onGround = true;
+        } else {
+          sim.onGround = false;
+        }
+
+        // if not explicitly duck action, auto release duck after frame 0
+        if (i > 0 && action !== 'duck') sim.ducking = false;
+        if (!sim.onGround) sim.ducking = false;
+
+        const h = sim.ducking && sim.onGround ? 30 : 48;
+        const w = sim.ducking && sim.onGround ? 56 : 44;
+        const dBox = { x: sim.x + 4, y: sim.y - h + 3, w: w - 8, h: h - 6 };
+
+        for (const o of obs) {
+          o.x -= state.speed;
+          const hit = { x: o.x + 3, y: o.y - o.h + 2, w: o.w - 6, h: o.h - 4 };
+          const overlap = dBox.x < hit.x + hit.w && dBox.x + dBox.w > hit.x && dBox.y < hit.y + hit.h && dBox.y + dBox.h > hit.y;
+          if (overlap) {
+            // heavy penalty for predicted collision; sooner collision = worse
+            risk += 10000 - i * 80;
+          }
+
+          // soft penalty: being too close to obstacle front while descending
+          const dx = hit.x - (dBox.x + dBox.w);
+          if (dx > -10 && dx < 18 && sim.vy > 0) risk += 12;
         }
       }
-      return y;
-    }
 
-    function evaluateObstacle(ob) {
-      const d = state.dino;
-      const dx = ob.x - d.x;
-      const tImpact = dx / state.speed;
-      if (tImpact <= 0) return { jump: false, duck: false, urgency: 0 };
-
-      // look where dino/obstacle will be near overlap window
-      const probe = Math.max(1, Math.floor(tImpact - 2));
-      const dinoNoJumpBottom = simDinoBottomAt(probe, false);
-      const dinoJumpBottom = simDinoBottomAt(probe, true);
-      const obsTop = ob.y - ob.h;
-      const obsBottom = ob.y;
-
-      // if no-jump path intersects obstacle vertical range, jump is needed
-      const noJumpHits = dinoNoJumpBottom > obsTop + 2 && dinoNoJumpBottom < obsBottom + 2;
-
-      // if jump keeps dino above top at impact window, allow jump
-      const jumpClears = dinoJumpBottom <= obsTop + 4;
-
-      if (ob.type === 'cactus') {
-        return {
-          jump: noJumpHits && jumpClears,
-          duck: false,
-          urgency: 1 / Math.max(1, tImpact)
-        };
-      }
-
-      // ptero policy by height + predicted overlap
-      const isLow = obsTop > GROUND_Y - 40;
-      const jumpForLowPtero = isLow && noJumpHits && jumpClears;
-      const duckForHighPtero = !isLow && tImpact < Math.max(16, 26 - state.speed * 0.8);
-
-      return {
-        jump: jumpForLowPtero,
-        duck: duckForHighPtero,
-        urgency: 1 / Math.max(1, tImpact)
-      };
+      // discourage useless jumps/ducks when safe
+      if (action === 'jump' && risk < 5000) risk += 28;
+      if (action === 'duck' && risk < 5000) risk += 12;
+      return risk;
     }
 
     function aiControl() {
       if (!state.ai || !state.running) return;
       const d = state.dino;
 
-      const ahead = state.obstacles
-        .filter(o => o.x + o.w > d.x - 8)
-        .sort((a,b)=>a.x-b.x)
-        .slice(0,3);
-
-      let needJump = false;
-      let needDuck = false;
-      let maxUrg = 0;
-
-      for (const o of ahead) {
-        const e = evaluateObstacle(o);
-        if (e.urgency > maxUrg) maxUrg = e.urgency;
-        needJump = needJump || e.jump;
-        needDuck = needDuck || e.duck;
-      }
-
-      // anti-spam gate: jump only on ground + short cooldown window
+      // jump cooldown to avoid spam-bounce
       if (state.aiJumpLock == null) state.aiJumpLock = 0;
       if (state.aiJumpLock > 0) state.aiJumpLock--;
 
-      if (needJump && d.onGround && state.aiJumpLock === 0) {
-        jump();
-        state.aiJumpLock = Math.max(8, Math.floor(16 - state.speed * 0.25));
+      const nearest = state.obstacles
+        .filter(o => o.x + o.w > d.x - 8)
+        .sort((a,b)=>a.x-b.x)[0];
+
+      if (!nearest) {
+        setDuck(false);
+        return;
       }
 
-      // duck only when threat is near; release quickly when safe
-      const shouldDuckNow = needDuck && d.onGround && maxUrg > 0.04;
-      setDuck(shouldDuckNow);
+      const dx = nearest.x - d.x;
+      // don't make decisions too early
+      if (dx > 260) {
+        setDuck(false);
+        return;
+      }
+
+      const riskNone = simulateRisk('none');
+      const riskDuck = d.onGround ? simulateRisk('duck') : Infinity;
+      const riskJump = (d.onGround && state.aiJumpLock === 0) ? simulateRisk('jump') : Infinity;
+
+      const best = Math.min(riskNone, riskDuck, riskJump);
+
+      if (best === riskJump && riskJump + 120 < riskNone) {
+        setDuck(false);
+        jump();
+        state.aiJumpLock = Math.max(7, Math.floor(14 - state.speed * 0.2));
+        return;
+      }
+
+      if (best === riskDuck && riskDuck + 50 < riskNone) {
+        setDuck(true);
+      } else {
+        setDuck(false);
+      }
     }
 
     function update() {
