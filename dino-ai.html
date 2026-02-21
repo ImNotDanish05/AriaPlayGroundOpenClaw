@@ -292,7 +292,7 @@
       scoreEl.textContent = `Score: ${Math.floor(state.score)}${state.ai ? ' (AI)' : ''}${state.running ? '' : '  — GAME OVER'}`;
     }
 
-    function drawDino() {
+    function drawDino(isNight = false) {
       const d = state.dino;
       const duck = d.ducking && d.onGround;
       const h = duck ? 30 : d.h;
@@ -300,15 +300,15 @@
       const y = d.y - h;
 
       // body
-      ctx.fillStyle = '#2e2e2e';
+      ctx.fillStyle = isNight ? '#e8ecf5' : '#2e2e2e';
       ctx.fillRect(d.x + 8, y + 8, w - 10, h - 10);
 
       // head
       if (!duck) {
         ctx.fillRect(d.x + w - 16, y - 4, 14, 14);
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = isNight ? '#1f2430' : '#fff';
         ctx.fillRect(d.x + w - 8, y + 1, 3, 3);
-        ctx.fillStyle = '#2e2e2e';
+        ctx.fillStyle = isNight ? '#e8ecf5' : '#2e2e2e';
       }
 
       // legs animation
@@ -322,13 +322,13 @@
       }
     }
 
-    function drawObstacle(o) {
+    function drawObstacle(o, isNight = false) {
       if (o.type === 'cactus') {
-        ctx.fillStyle = '#217a3c';
+        ctx.fillStyle = isNight ? '#8de7a6' : '#217a3c';
         ctx.fillRect(o.x, o.y - o.h, o.w, o.h);
         ctx.fillRect(o.x + 4, o.y - o.h - 8, 6, 14);
       } else {
-        ctx.fillStyle = '#555';
+        ctx.fillStyle = isNight ? '#d8dbe3' : '#555';
         ctx.fillRect(o.x, o.y - o.h, o.w, o.h - 8);
         const wingUp = Math.sin(o.flap) > 0;
         if (wingUp) {
@@ -341,8 +341,8 @@
       }
     }
 
-    function drawCloud(cl) {
-      ctx.fillStyle = '#e8edf6';
+    function drawCloud(cl, isNight = false) {
+      ctx.fillStyle = isNight ? '#3b4252' : '#e8edf6';
       ctx.fillRect(cl.x, cl.y, cl.w, 14);
       ctx.fillRect(cl.x + 8, cl.y - 8, cl.w*0.45, 10);
       ctx.fillRect(cl.x + cl.w*0.45, cl.y - 6, cl.w*0.4, 10);
@@ -351,11 +351,30 @@
     function render() {
       ctx.clearRect(0,0,c.width,c.height);
 
-      // sky/ground
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,c.width,c.height);
-      for (const cl of state.clouds) drawCloud(cl);
+      const scoreInt = Math.floor(state.score);
+      const cycle = 500; // switch every 500 points like classic vibe
+      const isNight = Math.floor(scoreInt / cycle) % 2 === 1;
 
-      ctx.strokeStyle = '#d8d8d8';
+      // sky/ground day-night cycle
+      ctx.fillStyle = isNight ? '#1f2430' : '#ffffff';
+      ctx.fillRect(0,0,c.width,c.height);
+
+      // stars/moon at night
+      if (isNight) {
+        ctx.fillStyle = '#f4f7ff';
+        ctx.beginPath();
+        ctx.arc(c.width - 90, 48, 14, 0, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < 24; i++) {
+          const sx = (i * 97 + 43) % c.width;
+          const sy = 16 + ((i * 53) % 90);
+          ctx.fillRect(sx, sy, 2, 2);
+        }
+      }
+
+      for (const cl of state.clouds) drawCloud(cl, isNight);
+
+      ctx.strokeStyle = isNight ? '#6b7280' : '#d8d8d8';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(0, GROUND_Y + 1);
@@ -363,14 +382,14 @@
       ctx.stroke();
 
       // ground marks
-      ctx.fillStyle = '#d0d0d0';
+      ctx.fillStyle = isNight ? '#7b8190' : '#d0d0d0';
       for (let i=0;i<12;i++) {
         const x = (i*110 - (state.t*state.speed*0.5)%110);
         ctx.fillRect(x, GROUND_Y + 5, 36, 2);
       }
 
-      for (const o of state.obstacles) drawObstacle(o);
-      drawDino();
+      for (const o of state.obstacles) drawObstacle(o, isNight);
+      drawDino(isNight);
 
       if (!state.running) {
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
