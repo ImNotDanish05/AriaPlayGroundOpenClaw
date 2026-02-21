@@ -257,7 +257,7 @@
 
       state.t++;
       state.score += 0.12;
-      state.speed = Math.min(19.5, 7 + state.t / 900);
+      state.speed = 7 + state.t / 900;
 
       state.spawnCooldown -= 1;
       if (state.spawnCooldown <= 0) spawnObstacle();
