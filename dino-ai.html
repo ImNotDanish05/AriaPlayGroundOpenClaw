@@ -199,9 +199,29 @@
       }
 
       const dx = nearest.x - d.x;
-      // don't make decisions too early
-      if (dx > 260) {
+      if (dx > 280) {
         setDuck(false);
+        return;
+      }
+
+      // --- Early jump calibrator (fix: jump too late / on-top-of-obstacle) ---
+      // Aim: dino apex roughly around obstacle center (more balanced 0.5:0.5 clearance)
+      const apexFrame = Math.abs(jumpVel) / gravity; // ~17 frames
+      const dinoCenterX = d.x + d.w * 0.5;
+      const obsCenterX = nearest.x + nearest.w * 0.5;
+      const tToCenter = (obsCenterX - dinoCenterX) / state.speed;
+      const isLowBird = nearest.type === 'ptero' && (nearest.y - nearest.h) > (GROUND_Y - 42);
+      const shouldEarlyJump =
+        d.onGround &&
+        state.aiJumpLock === 0 &&
+        (nearest.type === 'cactus' || isLowBird) &&
+        tToCenter <= (apexFrame + 7) &&
+        tToCenter >= 3;
+
+      if (shouldEarlyJump) {
+        setDuck(false);
+        jump();
+        state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
         return;
       }
 
@@ -211,14 +231,14 @@
 
       const best = Math.min(riskNone, riskDuck, riskJump);
 
-      if (best === riskJump && riskJump + 120 < riskNone) {
+      if (best === riskJump && riskJump + 100 < riskNone) {
         setDuck(false);
         jump();
-        state.aiJumpLock = Math.max(7, Math.floor(14 - state.speed * 0.2));
+        state.aiJumpLock = Math.max(8, Math.floor(15 - state.speed * 0.2));
         return;
       }
 
-      if (best === riskDuck && riskDuck + 50 < riskNone) {
+      if (best === riskDuck && riskDuck + 40 < riskNone) {
         setDuck(true);
       } else {
         setDuck(false);
