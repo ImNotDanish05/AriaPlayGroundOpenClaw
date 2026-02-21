@@ -163,17 +163,25 @@
         return;
       }
 
-      // Duck logic for ptero mid/high, close window only.
+      // Duck logic for ptero mid/high, with hold timer to avoid standing up too early.
+      if (state.duckHoldUntil == null) state.duckHoldUntil = 0;
       if (nearest.type === 'ptero') {
         const band = classifyPtero(nearest);
         if (band !== 'low') {
-          const shouldDuck = d.onGround && dx < (120 + state.speed * 2.2) && dx > -26;
-          setDuck(shouldDuck);
+          const shouldDuckNow = d.onGround && dx < (126 + state.speed * 2.4) && dx > -34;
+          if (shouldDuckNow) {
+            // keep ducking a little longer after passing bird
+            state.duckHoldUntil = Math.max(state.duckHoldUntil, state.t + Math.floor(12 + state.speed * 0.7));
+          }
+          const keepHolding = d.onGround && state.t <= state.duckHoldUntil;
+          setDuck(shouldDuckNow || keepHolding);
         } else {
           setDuck(false);
+          state.duckHoldUntil = 0;
         }
       } else {
-        setDuck(false);
+        // release only when hold expired
+        if (state.t > state.duckHoldUntil) setDuck(false);
       }
 
       // Build a stable jump plan (prevents jitter / repeated re-planning)
