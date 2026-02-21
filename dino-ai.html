@@ -163,24 +163,38 @@
         return;
       }
 
-      // Duck logic for ptero mid/high, with delayed start + tail hold.
+      // NEW duck logic: trigger close to impact + hold until bird fully passes dino.
       if (state.duckHoldUntil == null) state.duckHoldUntil = 0;
-      if (nearest.type === 'ptero') {
+      if (nearest.type === 'ptero' && d.onGround) {
         const band = classifyPtero(nearest);
         if (band !== 'low') {
-          // Start duck later (closer to bird), then hold shortly after pass.
-          const startDuckDx = 92 + state.speed * 1.5;
-          const endDuckDx = -30;
-          const shouldDuckNow = d.onGround && dx < startDuckDx && dx > endDuckDx;
+          // Predict hit relevance only for standing body.
+          const birdTop = nearest.y - nearest.h + 2;
+          const birdBottom = nearest.y - 2;
+          const standTop = GROUND_Y - 48 + 3;
+          const standBottom = GROUND_Y - 3;
+          const canHitStanding = birdBottom > standTop && birdTop < standBottom;
 
-          if (shouldDuckNow) {
-            // Keep duck a bit after crossing to avoid instant stand-up collision.
-            state.duckHoldUntil = Math.max(state.duckHoldUntil, state.t + Math.floor(10 + state.speed * 0.45));
+          const dinoLeft = d.x + 4;
+          const dinoRight = dinoLeft + 36; // standing hitbox width
+          const birdLeft = nearest.x + 3;
+          const birdRight = nearest.x + nearest.w - 3;
+          const frontGap = birdLeft - dinoRight;
+
+          // Start duck when bird is actually close (not too early).
+          const startGap = 46 + state.speed * 0.9;
+          const shouldStartDuck = canHitStanding && frontGap <= startGap && birdRight > dinoLeft;
+
+          if (shouldStartDuck) {
+            // Hold a bit past crossing so it won't stand up into the bird.
+            state.duckHoldUntil = Math.max(state.duckHoldUntil, state.t + Math.floor(14 + state.speed * 0.4));
           }
 
-          const keepHolding = d.onGround && dx <= 8 && state.t <= state.duckHoldUntil;
-          setDuck(shouldDuckNow || keepHolding);
+          const birdPassed = birdRight < dinoLeft - 8;
+          const keepDuck = !birdPassed || state.t <= state.duckHoldUntil;
+          setDuck(shouldStartDuck || keepDuck);
         } else {
+          // low bird: prefer jump logic, do not duck.
           setDuck(false);
           state.duckHoldUntil = 0;
         }
