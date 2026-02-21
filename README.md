@@ -27,6 +27,8 @@ Base URL: `https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/`
   https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/ai-bermain-tictactoc-bersama-user.html
 - `ai-vs-ai-mencoba-bermain-chess.html` — AI vs AI chess simulation  
   https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/ai-vs-ai-mencoba-bermain-chess.html
+- `suno-batman4014-tribute.html` — tribute page for Suno AI music + Batman4014 animation  
+  https://imnotdanish05.github.io/AriaPlayGroundOpenClaw/suno-batman4014-tribute.html
 
 ## Why this exists
 
